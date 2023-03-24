@@ -400,7 +400,7 @@ void loop() {
   //printAccelData();     //Prints filtered accelerometer data direct from IMU (expected: ~ -2 to 2; x,y 0 when level, z 1 when level)
   //printMagData();       //Prints filtered magnetometer data direct from IMU (expected: ~ -300 to 300)
   //printRollPitchYaw();  //Prints roll, pitch, and yaw angles in degrees from Madgwick filter (expected: degrees, 0 when level)
-  //printPIDoutput();     //Prints computed stabilized PID variables from controller and desired setpoint (expected: ~ -1 to 1)
+  printPIDoutput();     //Prints computed stabilized PID variables from controller and desired setpoint (expected: ~ -1 to 1)
   //printMotorCommands(); //Prints the values being written to the motors (expected: 120 to 250)
   //printServoCommands(); //Prints the values being written to the servos (expected: 0 to 180)
   //printLoopRate();      //Prints the time between loops in microseconds (expected: microseconds between loop iterations)
@@ -413,9 +413,23 @@ void loop() {
   getDesState(); //Convert raw commands to normalized values based on saturated control limits
   
   //PID Controller - SELECT ONE:
-  controlANGLE(); //Stabilize on angle setpoint
+  //controlANGLE(); //Stabilize on angle setpoint
   //controlANGLE2(); //Stabilize on angle setpoint using cascaded method. Rate controller must be tuned well first!
   //controlRATE(); //Stabilize on rate setpoint
+
+  if (channel_6_pwm > 1500) { //angle mode
+    maxRoll = 30.0; //degrees
+    maxPitch = 30.0; //degrees
+    maxYaw = 180.0; //degrees/sec
+    controlANGLE();
+  }
+
+  if(channel_6_pwm < 1500) { //rate mode
+    maxRoll = 180.0; //degrees/sec
+    maxPitch = 180.0; //degrees/sec
+    maxYaw = 180.0; //degrees/sec
+    controlRATE();
+  }
 
   //Actuator mixing and scaling to PWM values
   controlMixer(); //Mixes PID outputs to scaled actuator commands -- custom mixing assignments done here
@@ -468,18 +482,18 @@ void controlMixer() {
    */
    
   //Quad mixing - EXAMPLE
-  m1_command_scaled = thro_des - pitch_PID + roll_PID + yaw_PID; //Front Left
-  m2_command_scaled = thro_des - pitch_PID - roll_PID - yaw_PID; //Front Right
+  m1_command_scaled = thro_des - pitch_PID + roll_PID + yaw_PID; //Front left
+  m2_command_scaled = thro_des - pitch_PID - roll_PID - yaw_PID; //Front right
   m3_command_scaled = thro_des + pitch_PID - roll_PID + yaw_PID; //Back Right
-  m4_command_scaled = thro_des + pitch_PID + roll_PID - yaw_PID; //Back Left
+  m4_command_scaled = thro_des + pitch_PID + roll_PID - yaw_PID; //Back Right
   m5_command_scaled = 0;
   m6_command_scaled = 0;
 
   //0.5 is centered servo, 0.0 is zero throttle if connecting to ESC for conventional PWM, 1.0 is max throttle
-  s1_command_scaled = 0;
-  s2_command_scaled = 0;
-  s3_command_scaled = 0;
-  s4_command_scaled = 0;
+  s1_command_scaled = pitch_PID;
+  s2_command_scaled = pitch_PID;
+  s3_command_scaled = roll_PID;
+  s4_command_scaled = roll_PID;
   s5_command_scaled = 0;
   s6_command_scaled = 0;
   s7_command_scaled = 0;
@@ -542,7 +556,10 @@ void getIMUdata() {
    * the readings. The filter parameters B_gyro and B_accel are set to be good for a 2kHz loop rate. Finally,
    * the constant errors found in calculate_IMU_error() on startup are subtracted from the accelerometer and gyro readings.
    */
-  int16_t AcX,AcY,AcZ,GyX,GyY,GyZ,MgX,MgY,MgZ;
+  int16_t AcX,AcY,AcZ,GyX,GyY,GyZ;
+  int16_t MgX = 0;
+  int16_t MgY = 0;
+  int16_t MgZ = 0;
 
   #if defined USE_MPU6050_I2C
     mpu6050.getMotion6(&AcX, &AcY, &AcZ, &GyX, &GyY, &GyZ);
@@ -606,13 +623,7 @@ void calculate_IMU_error() {
    * accelerometer values AccX, AccY, AccZ, GyroX, GyroY, GyroZ in getIMUdata(). This eliminates drift in the
    * measurement. 
    */
-  int16_t AcX,AcY,AcZ,GyX,GyY,GyZ,MgX,MgY,MgZ;
-  AccErrorX = 0.0;
-  AccErrorY = 0.0;
-  AccErrorZ = 0.0;
-  GyroErrorX = 0.0;
-  GyroErrorY= 0.0;
-  GyroErrorZ = 0.0;
+  int16_t AcX,AcY,AcZ,GyX,GyY,GyZ;
   
   //Read IMU values 12000 times
   int c = 0;
