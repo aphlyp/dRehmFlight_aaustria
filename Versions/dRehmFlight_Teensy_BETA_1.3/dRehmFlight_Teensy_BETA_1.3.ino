@@ -42,16 +42,16 @@ static const uint8_t num_DSM_channels = 6; //If using DSM RX, change this to mat
 //#define USE_MPU9250_SPI
 
 //Uncomment only one full scale gyro range (deg/sec)
-#define GYRO_250DPS //Default
+//#define GYRO_250DPS //Default
 //#define GYRO_500DPS
 //#define GYRO_1000DPS
-//#define GYRO_2000DPS
+#define GYRO_2000DPS
 
 //Uncomment only one full scale accelerometer range (G's)
-#define ACCEL_2G //Default
+//#define ACCEL_2G //Default
 //#define ACCEL_4G
 //#define ACCEL_8G
-//#define ACCEL_16G
+#define ACCEL_16G
 
 
 
@@ -64,6 +64,7 @@ static const uint8_t num_DSM_channels = 6; //If using DSM RX, change this to mat
 #include <Wire.h>     //I2c communication
 #include <SPI.h>      //SPI communication
 #include <PWMServo.h> //Commanding any extra actuators, installed with teensyduino installer
+#include <SD.h>
 
 #if defined USE_SBUS_RX
   #include "src/SBUS/SBUS.h"   //sBus interface
@@ -298,7 +299,10 @@ int m1_command_PWM, m2_command_PWM, m3_command_PWM, m4_command_PWM, m5_command_P
 float s1_command_scaled, s2_command_scaled, s3_command_scaled, s4_command_scaled, s5_command_scaled, s6_command_scaled, s7_command_scaled;
 int s1_command_PWM, s2_command_PWM, s3_command_PWM, s4_command_PWM, s5_command_PWM, s6_command_PWM, s7_command_PWM;
 
-
+//SD Card
+const int chipSelect = BUILTIN_SDCARD;//Sets up SD card for writing data
+float datawriteseconds=1./100;//seconds between data writes to the SD card
+int SD_flag=1;
 
 //========================================================================================================================//
 //                                                      VOID SETUP                                                        //                           
@@ -349,10 +353,10 @@ void setup() {
   //calculate_IMU_error(); //Calibration parameters printed to serial monitor. Paste these in the user specified variables section, then comment this out forever.
 
   //Arm servo channels
-  servo1.write(0); //Command servo angle from 0-180 degrees (1000 to 2000 PWM)
-  servo2.write(0); //Set these to 90 for servos if you do not want them to briefly max out on startup
-  servo3.write(0); //Keep these at 0 if you are using servo outputs for motors
-  servo4.write(0);
+  servo1.write(90); //Command servo angle from 0-180 degrees (1000 to 2000 PWM)
+  servo2.write(90); //Set these to 90 for servos if you do not want them to briefly max out on startup
+  servo3.write(90); //Keep these at 0 if you are using servo outputs for motors
+  servo4.write(90);
   servo5.write(0);
   servo6.write(0);
   servo7.write(0);
@@ -377,8 +381,17 @@ void setup() {
   //If using MPU9250 IMU, uncomment for one-time magnetometer calibration (may need to repeat for new locations)
   //calibrateMagnetometer(); //Generates magentometer error and scale factors to be pasted in user-specified variables section
 
+Serial.print("Initializing SD card...");
+// see if the card is present and can be initialized:
+if (!SD.begin(chipSelect)) {
+Serial.println("Card failed, or not present");
+SD_flag=0;//No SD Card flag
+}else{
+Serial.println("card initialized.");
+SD_flag=1;//SD Card exists
 }
 
+}
 
 
 //========================================================================================================================//
@@ -400,7 +413,7 @@ void loop() {
   //printAccelData();     //Prints filtered accelerometer data direct from IMU (expected: ~ -2 to 2; x,y 0 when level, z 1 when level)
   //printMagData();       //Prints filtered magnetometer data direct from IMU (expected: ~ -300 to 300)
   //printRollPitchYaw();  //Prints roll, pitch, and yaw angles in degrees from Madgwick filter (expected: degrees, 0 when level)
-  printPIDoutput();     //Prints computed stabilized PID variables from controller and desired setpoint (expected: ~ -1 to 1)
+  //printPIDoutput();     //Prints computed stabilized PID variables from controller and desired setpoint (expected: ~ -1 to 1)
   //printMotorCommands(); //Prints the values being written to the motors (expected: 120 to 250)
   //printServoCommands(); //Prints the values being written to the servos (expected: 0 to 180)
   //printLoopRate();      //Prints the time between loops in microseconds (expected: microseconds between loop iterations)
@@ -454,6 +467,12 @@ void loop() {
 
   //Regulate loop rate
   loopRate(2000); //Do not exceed 2000Hz, all filter parameters tuned to 2000Hz by default
+
+  //Write output data to SD card only if the card is insterted!
+if (SD_flag==1){
+SDcard();
+}
+
 }
 
 
@@ -480,7 +499,11 @@ void controlMixer() {
    *roll_passthru, pitch_passthru, yaw_passthru - direct unstabilized command passthrough
    *channel_6_pwm - free auxillary channel, can be used to toggle things with an 'if' statement
    */
-   
+ float servo_1_trim = 0.44;
+ float servo_2_trim = 0.45;
+ float servo_3_trim = 0.52;
+ float servo_4_trim = 0.52;
+ 
   //Quad mixing - EXAMPLE
   m1_command_scaled = thro_des - pitch_PID + roll_PID + yaw_PID; //Front left
   m2_command_scaled = thro_des - pitch_PID - roll_PID - yaw_PID; //Front right
@@ -490,10 +513,10 @@ void controlMixer() {
   m6_command_scaled = 0;
 
   //0.5 is centered servo, 0.0 is zero throttle if connecting to ESC for conventional PWM, 1.0 is max throttle
-  s1_command_scaled = pitch_PID;
-  s2_command_scaled = pitch_PID;
-  s3_command_scaled = roll_PID;
-  s4_command_scaled = roll_PID;
+  s1_command_scaled = servo_1_trim + pitch_PID;
+  s2_command_scaled = servo_2_trim + pitch_PID;
+  s3_command_scaled = servo_3_trim + roll_PID;
+  s4_command_scaled = servo_4_trim + roll_PID;
   s5_command_scaled = 0;
   s6_command_scaled = 0;
   s7_command_scaled = 0;
@@ -1702,6 +1725,48 @@ void printLoopRate() {
     Serial.print(F("dt = "));
     Serial.println(dt*1000000.0);
   }
+}
+
+void SDcard() {//write data to SD card
+int drwitemicros=datawriteseconds*1e6;
+if (current_time - print_counter > drwitemicros) {
+print_counter = micros();
+// open the file.
+File dataFile = SD.open("datalog.txt", FILE_WRITE);
+String dataString = "";
+// Append sensor data into a string:
+// We can add variables to store as needed here
+dataString += String(current_time/1e6);
+dataString += ",";
+dataString += String(roll_IMU);
+dataString += ",";
+dataString += String(pitch_IMU);
+dataString += ",";
+dataString += String(yaw_IMU);
+dataString += ",";
+dataString += String(GyroX);
+dataString += ",";
+dataString += String(GyroY);
+dataString += ",";
+dataString += String(GyroZ);
+dataString += ",";
+dataString += String(AccX);
+dataString += ",";
+dataString += String(AccY);
+dataString += ",";
+dataString += String(AccZ);
+
+// if the file is available, write to it:
+if (dataFile) {
+dataFile.println(dataString);
+dataFile.close();
+// print to the serial port too:
+//Serial.println(dataString);//uncomment this if you want to see the data written to the card on the serial monitor
+} else {
+// if the file isn't open, pop up an error:
+Serial.println("error opening datalog.txt");
+}
+}
 }
 
 //=========================================================================================//
