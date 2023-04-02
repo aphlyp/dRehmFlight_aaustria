@@ -381,16 +381,15 @@ void setup() {
   //If using MPU9250 IMU, uncomment for one-time magnetometer calibration (may need to repeat for new locations)
   //calibrateMagnetometer(); //Generates magentometer error and scale factors to be pasted in user-specified variables section
 
-Serial.print("Initializing SD card...");
-// see if the card is present and can be initialized:
-if (!SD.begin(chipSelect)) {
-Serial.println("Card failed, or not present");
-SD_flag=0;//No SD Card flag
-}else{
-Serial.println("card initialized.");
-SD_flag=1;//SD Card exists
-}
-
+  Serial.print("Initializing SD card...");
+  if (!SD.begin(chipSelect)) { // Check if SD card is present and can be initialized
+    Serial.println("Card failed, or not present");
+    SD_flag = 0; // Set SD flag to 0 if card is not present
+  }
+  else {
+    Serial.println("card initialized.");
+    SD_flag = 1; // Set SD flag to 1 if card is present
+  }
 }
 
 
@@ -468,11 +467,9 @@ void loop() {
   //Regulate loop rate
   loopRate(2000); //Do not exceed 2000Hz, all filter parameters tuned to 2000Hz by default
 
-  //Write output data to SD card only if the card is insterted!
-if (SD_flag==1){
-SDcard();
-}
-
+  if (SD_flag == 1) { // Only write data to SD card if the card is present
+    SDcard(); // Call the function to write data to SD card
+  }
 }
 
 
@@ -520,7 +517,6 @@ void controlMixer() {
   s5_command_scaled = 0;
   s6_command_scaled = 0;
   s7_command_scaled = 0;
- 
 }
 
 void IMUinit() {
@@ -1730,46 +1726,48 @@ void printLoopRate() {
   }
 }
 
-void SDcard() {//write data to SD card
-int drwitemicros=datawriteseconds*1e6;
-if (current_time - print_counter > drwitemicros) {
-print_counter = micros();
-// open the file.
-File dataFile = SD.open("datalog.txt", FILE_WRITE);
-String dataString = "";
-// Append sensor data into a string:
-// We can add variables to store as needed here
-dataString += String(current_time/1e6);
-dataString += ",";
-dataString += String(roll_IMU);
-dataString += ",";
-dataString += String(pitch_IMU);
-dataString += ",";
-dataString += String(yaw_IMU);
-dataString += ",";
-dataString += String(GyroX);
-dataString += ",";
-dataString += String(GyroY);
-dataString += ",";
-dataString += String(GyroZ);
-dataString += ",";
-dataString += String(AccX);
-dataString += ",";
-dataString += String(AccY);
-dataString += ",";
-dataString += String(AccZ);
+void SDcard() { // Function to write data to SD card
+  int drwitemicros = datawriteseconds * 1e6; // Calculate the time interval between data writes in microseconds
 
-// if the file is available, write to it:
-if (dataFile) {
-dataFile.println(dataString);
-dataFile.close();
-// print to the serial port too:
-//Serial.println(dataString);//uncomment this if you want to see the data written to the card on the serial monitor
-} else {
-// if the file isn't open, pop up an error:
-Serial.println("error opening datalog.txt");
-}
-}
+  if (current_time - print_counter > drwitemicros) { // Check if it's time to write data to SD card
+    print_counter = micros(); // Reset the counter
+    
+    // Open the file for writing
+    File dataFile = SD.open("datalog.txt", FILE_WRITE);
+    String dataString = ""; // Initialize an empty string to store data
+    
+    // Append sensor data to the data string(we can add variables to store as needed here)
+    dataString += String(current_time / 1e6);
+    dataString += ",";
+    dataString += String(roll_IMU);
+    dataString += ",";
+    dataString += String(pitch_IMU);
+    dataString += ",";
+    dataString += String(yaw_IMU);
+    dataString += ",";
+    dataString += String(GyroX);
+    dataString += ",";
+    dataString += String(GyroY);
+    dataString += ",";
+    dataString += String(GyroZ);
+    dataString += ",";
+    dataString += String(AccX);
+    dataString += ",";
+    dataString += String(AccY);
+    dataString += ",";
+    dataString += String(AccZ);
+    
+    if (dataFile) { // Check if file is available for writing
+      dataFile.println(dataString); // Write data to file
+      dataFile.close(); // Close the file
+      
+      // Print data to serial monitor (uncomment if desired)
+      // Serial.println(dataString);
+    }
+    else {
+      Serial.println("error opening datalog.txt"); // Print an error message if file cannot be opened
+    }
+  }
 }
 
 //=========================================================================================//
