@@ -300,9 +300,10 @@ float s1_command_scaled, s2_command_scaled, s3_command_scaled, s4_command_scaled
 int s1_command_PWM, s2_command_PWM, s3_command_PWM, s4_command_PWM, s5_command_PWM, s6_command_PWM, s7_command_PWM;
 
 //SD Card
-const int chipSelect = BUILTIN_SDCARD;//Sets up SD card for writing data
-float datawriteseconds=1./100;//seconds between data writes to the SD card
-int SD_flag=1;
+const int chipSelect = BUILTIN_SDCARD; // Set the chip select pin
+float datawriteseconds = 1.0 / 100; // Set the time interval between data writes
+int SD_flag = 1; // Initialize SD flag to 1
+int fileNum; // Store the file number
 
 //========================================================================================================================//
 //                                                      VOID SETUP                                                        //                           
@@ -390,8 +391,62 @@ void setup() {
     Serial.println("card initialized.");
     SD_flag = 1; // Set SD flag to 1 if card is present
   }
-}
+  
+  if (SD_flag == 1) {
+    // Read last file number from file
+    File fileNumFile = SD.open("fileNum.txt", FILE_READ);
+    if (fileNumFile) {
+      String fileNumString = fileNumFile.readStringUntil('\n');
+      fileNum = fileNumString.toInt();
+      fileNum++;
+      fileNumFile.close();
+    }
+    else {
+      // If fileNum.txt doesn't exist, start with 1
+      fileNum = 1;
+    }
 
+    // Find next available file number
+    int maxFileNum = 999;
+    bool foundFile = false;
+    while (!foundFile && fileNum <= maxFileNum) {
+      String fileName = "datalog" + String(fileNum) + ".txt";
+      if (!SD.exists(fileName.c_str())) {
+        foundFile = true;
+      }
+      else {
+        fileNum++;
+      }
+    }
+
+    if (!foundFile) {
+      Serial.println("error: maximum number of files reached");
+    }
+    else {
+      // Write new file number to file
+      File newFileNumFile = SD.open("fileNum.txt", FILE_WRITE);
+      if (newFileNumFile) {
+        newFileNumFile.println(fileNum);
+        newFileNumFile.close();
+      }
+      else {
+        Serial.println("error opening fileNum.txt");
+      }
+
+      // Open the file for writing
+      String fileName = "datalog" + String(fileNum) + ".txt";
+      File dataFile = SD.open(fileName.c_str(), FILE_WRITE);
+      if (dataFile) {
+        // Write data to file
+        dataFile.println("data goes here");
+        dataFile.close();
+      }
+      else {
+        Serial.println("error opening " + fileName);
+      }
+    }
+  }
+}
 
 //========================================================================================================================//
 //                                                       MAIN LOOP                                                        //                           
@@ -1731,11 +1786,12 @@ void SDcard() { // Function to write data to SD card
 
   if (current_time - print_counter > drwitemicros) { // Check if it's time to write data to SD card
     print_counter = micros(); // Reset the counter
-    
-    // Open the file for writing
-    File dataFile = SD.open("datalog.txt", FILE_WRITE);
+
+    // Open the file for writing with the new file name
+    String fileName = "datalog" + String(fileNum) + ".txt";
+    File dataFile = SD.open(fileName.c_str(), FILE_WRITE);
     String dataString = ""; // Initialize an empty string to store data
-    
+
     // Append sensor data to the data string(we can add variables to store as needed here)
     dataString += String(current_time / 1e6);
     dataString += ",";
